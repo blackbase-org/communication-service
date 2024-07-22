@@ -1,30 +1,37 @@
-name: Deploy to DockerHub
+# Etape de build
+FROM node:20 AS builder
+ARG NODE_ENV=development
+ENV NODE_ENV=${NODE_ENV}
+WORKDIR /usr/src/app
+COPY package.json ./
+RUN npm install
+COPY . .
+RUN npm run build
 
-on:
-  push:
-    branches:
-      - main
-      - production
-      - staging
 
-jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the repo
-        uses: actions/checkout@v2
 
-      - name: Log in to DockerHub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPONAME }}:${{ github.ref_name }}
 
+# Étape de production
+FROM node:20 AS production
+
+ARG NODE_ENV=production
+ENV NODE_ENV=${NODE_ENV}
+
+WORKDIR /usr/src/app
+
+# Copier les fichiers de dépendances
+COPY package.json ./
+
+# Installer uniquement les dépendances de production
+RUN npm install --omit=dev
+
+
+# Copier les fichiers compilés depuis l'étape de développement
+COPY --from=builder /usr/src/app/dist ./dist
+
+# Exposer le port sur lequel l'application s'exécute
+EXPOSE 3000
+
+# Commande pour exécuter l'application
+CMD ["node", "dist/main"]
